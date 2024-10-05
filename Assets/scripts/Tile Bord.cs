@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -8,30 +9,31 @@ public class TileBord : MonoBehaviour
     public Tile tileprefab;
     public TileState[] tilestates;
 
-   private  TileGrid grid;
+    private TileGrid grid;
     private List<Tile> tiles;
     private bool waiting;
-
+    private Vector2 touchStartPos;
+    public float swipeThreshold = 50f;
     private void Awake()
     {
-        grid =GetComponentInChildren<TileGrid>();
-        tiles=new List<Tile>(16);
+        grid = GetComponentInChildren<TileGrid>();
+        tiles = new List<Tile>(16);
     }
-   public void clearBord()
+    public void clearBord()
     {
-        foreach(var cell in grid.cells)
+        foreach (var cell in grid.cells)
         {
             cell.tile = null;
         }
-        foreach(var tile in tiles)
+        foreach (var tile in tiles)
         {
             Destroy(tile.gameObject);
         }
         tiles.Clear();
     }
-    public   void CreateTile()
+    public void CreateTile()
     {
-      Tile tile=  Instantiate(tileprefab, grid.transform);
+        Tile tile = Instantiate(tileprefab, grid.transform);
         tile.setstate(tilestates[0], 2);
         tile.spwan(grid.Getrandomemptycell());
         tiles.Add(tile);
@@ -39,7 +41,15 @@ public class TileBord : MonoBehaviour
     private void Update()
     {
         if (!waiting)
-        { 
+        {
+            HandleMobhileInput();
+            HandleSwipeInput();
+        }
+
+    }
+    void HandleMobhileInput()
+    {
+        //laptopinput
         if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow))
         {
             movetiles(Vector2Int.up, 0, 1, 1, 1);
@@ -55,21 +65,68 @@ public class TileBord : MonoBehaviour
         else if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow))
         {
             movetiles(Vector2Int.right, grid.hight - 2, -1, 0, 1);
+
         }
     }
+    //MobhileInput
+    private void HandleSwipeInput()
+    {
+        if (Input.touchCount > 0)
+        {
+            Touch touch = Input.GetTouch(0);
 
+            if (touch.phase == TouchPhase.Began)
+            {
+                touchStartPos = touch.position;
+            }
+            else if (touch.phase == TouchPhase.Ended)
+            {
+                Vector2 touchEndPos = touch.position;
+                Vector2 swipeDelta = touchEndPos - touchStartPos;
+
+                if (swipeDelta.magnitude >= swipeThreshold)
+                {
+                    Vector2 swipeDirection = swipeDelta.normalized;
+
+                    if (Mathf.Abs(swipeDirection.x) > Mathf.Abs(swipeDirection.y))
+                    {
+                        // Horizontal swipe
+                        if (swipeDirection.x > 0)
+                        {
+                            movetiles(Vector2Int.right, grid.hight - 2, -1, 0, 1);
+                        }
+                        else
+                        {
+                            movetiles(Vector2Int.left, 1, 1, 0, 1);
+                        }
+                    }
+                    else
+                    {
+                        // Vertical swipe
+                        if (swipeDirection.y > 0)
+                        {
+                            movetiles(Vector2Int.up, 0, 1, 1, 1);
+                        }
+                        else
+                        {
+                            movetiles(Vector2Int.down, 0, 1, grid.hight - 2, -1);
+                        }
+                    }
+                }
+            }
+        }
     }
-    private void movetiles(Vector2Int directtion,int startindeX,int incrementX, int startindeY, int incrementY)
+    private void movetiles(Vector2Int directtion, int startindeX, int incrementX, int startindeY, int incrementY)
     {
         bool changed = false;
-        for(int x=startindeX;x>=0&&x<grid.width; x+=incrementX)
+        for (int x = startindeX; x >= 0 && x < grid.width; x += incrementX)
         {
-            for(int y=startindeY;y>=0&&y<grid.hight; y+=incrementY)
+            for (int y = startindeY; y >= 0 && y < grid.hight; y += incrementY)
             {
-             TileCell cell= grid.getcell(x,y);
+                TileCell cell = grid.getcell(x, y);
                 if (cell.occupide)
                 {
-             changed |=   moveTile(cell.tile, directtion);
+                    changed |= moveTile(cell.tile, directtion);
                 }
             }
         }
@@ -79,38 +136,39 @@ public class TileBord : MonoBehaviour
             StartCoroutine(waitforchanges());
         }
     }
-    private bool moveTile(Tile tile,Vector2Int direction)
+    private bool moveTile(Tile tile, Vector2Int direction)
     {
         TileCell newcell = null;
-        TileCell adjacent=grid.getadjacentCell(tile.cell,direction); 
+        TileCell adjacent = grid.getadjacentCell(tile.cell, direction);
 
-       while(adjacent!=null)
+        while (adjacent != null)
         {
-            if(adjacent.occupide)
+            if (adjacent.occupide)
             {
-                if (canmeerge(tile, adjacent.tile)){
-                    merge(tile,adjacent.tile);
+                if (canmeerge(tile, adjacent.tile))
+                {
+                    merge(tile, adjacent.tile);
                     return true;
                 }
                 break;
             }
-            newcell=adjacent;
-            adjacent=grid.getadjacentCell(adjacent,direction);
+            newcell = adjacent;
+            adjacent = grid.getadjacentCell(adjacent, direction);
 
         }
 
-       if(newcell != null)
+        if (newcell != null)
         {
             tile.moveto(newcell);
             return true;
-        } 
-       return false;
+        }
+        return false;
     }
 
 
-    private bool canmeerge(Tile a ,Tile b)
+    private bool canmeerge(Tile a, Tile b)
     {
-        return a.num == b.num&&!b.locked;
+        return a.num == b.num && !b.locked;
     }
 
     private void merge(Tile a, Tile b)
@@ -119,7 +177,7 @@ public class TileBord : MonoBehaviour
         a.merge(b.cell);
 
         int index = Mathf.Clamp(indexof(b.state) + 1, 0, tilestates.Length - 1);
-        int num= b.num * 2;
+        int num = b.num * 2;
         b.setstate(tilestates[index], num);
 
         gameManger.incresescore(num);
@@ -142,7 +200,7 @@ public class TileBord : MonoBehaviour
 
         yield return new WaitForSeconds(0.1f);
         waiting = false;
-        foreach(var tile in tiles)
+        foreach (var tile in tiles)
         {
             tile.locked = false;
         }
@@ -157,11 +215,11 @@ public class TileBord : MonoBehaviour
     }
     private bool checkforgameover()
     {
-        if(tiles.Count != grid.size)
+        if (tiles.Count != grid.size)
         {
-                 return false;
+            return false;
         }
-        foreach(var tile in tiles)
+        foreach (var tile in tiles)
         {
             TileCell up = grid.getadjacentCell(tile.cell, Vector2Int.up);
             TileCell down = grid.getadjacentCell(tile.cell, Vector2Int.down);
